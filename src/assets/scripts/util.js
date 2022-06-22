@@ -8,7 +8,8 @@ export function setColorWithTemplate(template) {
   return function (color) {
     let customTheme = JSON.parse(JSON.stringify(template))
     customTheme.block.h1[`border-bottom`] = `2px solid ${color}`
-    customTheme.block.h2[`background`] = color
+    customTheme.block.h2[`border-bottom`] = `2px solid ${color}`
+    //customTheme.block.h2[`background`] = color
     customTheme.block.h3[`border-left`] = `3px solid ${color}`
     customTheme.block.h4[`color`] = color
     customTheme.inline.strong[`color`] = color
@@ -22,7 +23,8 @@ export const setColorWithCustomTemplate = function setColorWithCustomTemplate(
 ) {
   let customTheme = JSON.parse(JSON.stringify(template))
   customTheme.block.h1[`border-bottom`] = `2px solid ${color}`
-  customTheme.block.h2[`background`] = color
+  customTheme.block.h2[`border-bottom`] = `2px solid ${color}`
+  //customTheme.block.h2[`background`] = color
   customTheme.block.h3[`border-left`] = `3px solid ${color}`
   customTheme.block.h4[`color`] = color
   customTheme.inline.strong[`color`] = color
@@ -34,7 +36,8 @@ export function setFontSizeWithTemplate(template) {
   return function (fontSize) {
     let customTheme = JSON.parse(JSON.stringify(template))
     customTheme.block.h1[`font-size`] = `${fontSize * 1.14}px`
-    customTheme.block.h2[`font-size`] = `${fontSize * 1.1}px`
+    customTheme.block.h2[`font-size`] = `${fontSize * 1.14}px`
+    //customTheme.block.h2[`font-size`] = `${fontSize * 1.1}px`
     customTheme.block.h3[`font-size`] = `${fontSize}px`
     customTheme.block.h4[`font-size`] = `${fontSize}px`
     return customTheme
@@ -48,13 +51,16 @@ export function customCssWithTemplate(jsonString, color, theme) {
   let customTheme = JSON.parse(JSON.stringify(theme))
   // block
   customTheme.block.h1[`border-bottom`] = `2px solid ${color}`
-  customTheme.block.h2[`background`] = color
+  customTheme.block.h2[`border-bottom`] = `2px solid ${color}`
+  //customTheme.block.h2[`border-bottom`] = `2px solid ${color}`
+  //customTheme.block.h2[`background`] = color
   customTheme.block.h3[`border-left`] = `3px solid ${color}`
   customTheme.block.h4[`color`] = color
   customTheme.inline.strong[`color`] = color
 
   customTheme.block.h1 = Object.assign(customTheme.block.h1, jsonString.h1)
   customTheme.block.h2 = Object.assign(customTheme.block.h2, jsonString.h2)
+  //customTheme.block.h2 = Object.assign(customTheme.block.h2, jsonString.h2)
   customTheme.block.h3 = Object.assign(customTheme.block.h3, jsonString.h3)
   customTheme.block.h4 = Object.assign(customTheme.block.h4, jsonString.h4)
   customTheme.block.code = Object.assign(

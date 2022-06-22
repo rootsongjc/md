@@ -24,10 +24,10 @@ export default {
       'text-align': `center`,
       'font-weight': `bold`,
       display: `table`,
-      margin: `4em auto 2em`,
+      margin: `2em auto 1em`,
       padding: `0 0.2em`,
-      background: `rgba(0, 152, 116, 0.9)`,
-      color: `#fff`,
+      'border-bottom': `2px solid rgba(0, 152, 116, 0.9)`,
+      color: baseColor,
     },
 
     // 三级标题样式

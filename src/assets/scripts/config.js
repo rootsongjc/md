@@ -38,19 +38,19 @@ export default {
   ],
   colorOption: [
     {
-      label: `经典蓝`,
-      value: `rgba(15, 76, 129, 1)`,
-      desc: `最新流行`,
+      label: `深邃蓝`,
+      value: `rgba(10, 85, 167, 1)`,
+      desc: `JS 主色调`,
     },
     {
-      label: `翡翠绿`,
-      value: `rgba(0, 152, 116, 1)`,
-      desc: `优雅清新`,
+      label: `靛青色`,
+      value: `rgba(43, 148, 195, 1)`,
+      desc: `JS 副色调`,
     },
     {
       label: `活力橘`,
-      value: `rgba(250, 81, 81, 1)`,
-      desc: `热情活泼`,
+      value: `rgba(240, 86, 35, 1)`,
+      desc: `T主色调`,
     },
   ],
   codeThemeOption: [
