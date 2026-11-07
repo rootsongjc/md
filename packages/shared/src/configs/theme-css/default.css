@@ -7,52 +7,60 @@
  */
 
 /* ==================== H1 ==================== */
+/* Centered title framed by two rules in the theme color */
 h1 {
   display: table;
-  padding: 0 1em;
+  padding: 0.35em 1em;
+  border-top: 2px solid var(--md-primary-color);
   border-bottom: 2px solid var(--md-primary-color);
-  margin: calc(2em * var(--md-block-spacing)) auto calc(1em * var(--md-block-spacing));
-  color: hsl(var(--foreground));
-  font-size: calc(var(--md-font-size) * 1.2);
+  margin: calc(2.5em * var(--md-block-spacing)) auto calc(1.5em * var(--md-block-spacing));
+  color: var(--md-primary-color);
+  font-size: calc(var(--md-font-size) * 1.3);
   font-weight: bold;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
   text-align: center;
 }
 
 /* ==================== H2 ==================== */
+/* Section heading: thick accent bar on the left, body-colored text */
 h2 {
-  display: table;
-  padding: 0 0.2em;
-  margin: calc(2em * var(--md-block-spacing)) auto calc(1em * var(--md-block-spacing));
-  color: var(--md-primary-color);
-  border-bottom: 2px solid var(--md-primary-color);
-  font-size: calc(var(--md-font-size) * 1.2);
+  display: block;
+  padding: 0.1em 0 0.1em 0.6em;
+  border-left: 5px solid var(--md-primary-color);
+  margin: calc(2.5em * var(--md-block-spacing)) 8px calc(1em * var(--md-block-spacing));
+  color: hsl(var(--foreground));
+  font-size: calc(var(--md-font-size) * 1.25);
   font-weight: bold;
-  text-align: center;
+  line-height: 1.4;
+  text-align: left;
 }
 
 /* ==================== H3 ==================== */
+/* Sub-section: theme-colored text with a dashed underline hugging the text */
 h3 {
-  padding-left: 8px;
-  border-left: 3px solid var(--md-primary-color);
-  margin: calc(2em * var(--md-block-spacing)) 8px calc(0.75em * var(--md-block-spacing)) 0;
-  color: hsl(var(--foreground));
+  display: table;
+  padding: 0 0.1em 0.2em;
+  border-bottom: 1px dashed var(--md-primary-color);
+  margin: calc(2em * var(--md-block-spacing)) 8px calc(0.75em * var(--md-block-spacing));
+  color: var(--md-primary-color);
   font-size: calc(var(--md-font-size) * 1.1);
   font-weight: bold;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 /* ==================== H4 ==================== */
 h4 {
-  margin: calc(2em * var(--md-block-spacing)) 8px calc(0.5em * var(--md-block-spacing));
+  margin: calc(1.75em * var(--md-block-spacing)) 8px calc(0.5em * var(--md-block-spacing));
   color: var(--md-primary-color);
-  font-size: calc(var(--md-font-size) * 1);
+  font-size: calc(var(--md-font-size) * 1.05);
   font-weight: bold;
 }
 
 /* ==================== H5 ==================== */
 h5 {
   margin: calc(1.5em * var(--md-block-spacing)) 8px calc(0.5em * var(--md-block-spacing));
-  color: var(--md-primary-color);
+  color: hsl(var(--foreground));
   font-size: calc(var(--md-font-size) * 1);
   font-weight: bold;
 }
@@ -60,8 +68,10 @@ h5 {
 /* ==================== H6 ==================== */
 h6 {
   margin: calc(1.5em * var(--md-block-spacing)) 8px calc(0.5em * var(--md-block-spacing));
-  font-size: calc(var(--md-font-size) * 1);
-  color: var(--md-primary-color);
+  color: hsl(var(--foreground));
+  font-size: calc(var(--md-font-size) * 0.95);
+  font-weight: normal;
+  opacity: 0.75;
 }
 
 /* ==================== Paragraph ==================== */
