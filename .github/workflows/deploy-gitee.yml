@@ -1,0 +1,87 @@
+name: Build and Deploy to Gitee Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    if: github.repository == 'doocs/md'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # 获取完整历史，便于推送到新分支
+
+      - name: Set up pnpm
+        uses: pnpm/setup@v3
+        with:
+          version: 12.14.0
+          runtime: node@22
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm web build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./apps/web/dist
+          publish_branch: dist
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy: ${{ github.sha }}'
+
+      - name: Sync to Gitee
+        id: gitee-sync
+        uses: Yikun/hub-mirror-action@ec47170fa9d126a4bee5a1ab9359845bb1395248 # v1.5
+        continue-on-error: true
+        with:
+          src: github/doocs
+          dst: gitee/doocs
+          dst_key: ${{ secrets.GITEE_RSA_PRIVATE_KEY }}
+          dst_token: ${{ secrets.GITEE_TOKEN }}
+          static_list: "md"
+          force_update: true
+          debug: true
+
+      - name: Deploy Gitee Pages
+        id: gitee-deploy
+        if: steps.gitee-sync.outcome == 'success'
+        continue-on-error: true
+        uses: yanglbme/gitee-pages-action@b70eff28cd340913f899eab8d0f485b978d78d54 # v1.4.2
+        with:
+          gitee-username: ${{ secrets.GITEE_USERNAME }}
+          gitee-password: ${{ secrets.GITEE_PASSWORD }}
+          gitee-repo: doocs/md
+          branch: dist
+
+      - name: Deployment Summary
+        run: |
+          echo "✅ Build completed successfully!"
+          echo "📦 Artifacts pushed to dist branch"
+          if [ "${{ steps.gitee-sync.outcome }}" == "success" ]; then
+            echo "🔄 Synced to Gitee repository"
+            if [ "${{ steps.gitee-deploy.outcome }}" == "success" ]; then
+              echo "🚀 Gitee Pages deployed"
+              echo ""
+              echo "Gitee Pages: https://doocs.gitee.io/md/"
+            else
+              echo "⚠️ Gitee Pages deployment failed or skipped"
+            fi
+          else
+            echo "⚠️ Gitee sync failed or skipped"
+          fi

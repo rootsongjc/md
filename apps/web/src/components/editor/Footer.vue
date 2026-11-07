@@ -1,0 +1,576 @@
+<script setup lang="ts">
+import type { MarkdownHeading } from '@/lib/markdown/headings'
+import { StateEffect } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { ArrowUpDown, BookOpen, Clock, Columns2, Ellipsis, Eye, FileText, Keyboard, LogIn, Monitor, Moon, PenLine, Pilcrow, Share2, Smartphone, Sun, Type, User } from '@lucide/vue'
+import NotificationBell from '@/components/editor/editor-header/NotificationBell.vue'
+import FooterDocumentSwitcher from '@/components/editor/footer/FooterDocumentSwitcher.vue'
+import FooterOutlinePopover from '@/components/editor/footer/FooterOutlinePopover.vue'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger as PopoverTriggerPrimitive,
+} from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { useSyncFooterMeta } from '@/composables/useSyncStatusMeta'
+import { getLocaleOption, getNextLocale } from '@/i18n/constants'
+import { formatRelativeTime } from '@/lib/format/relative-time'
+import {
+  clampGoToLineValue,
+  jumpToLine,
+} from '@/lib/markdown/headingNavigation'
+import { computeHeadingBreadcrumbs, extractMarkdownHeadings } from '@/lib/markdown/headings'
+import { isAccountUiEnabled } from '@/services/account/config'
+import { isShareUiEnabled } from '@/services/share/client'
+import { isSyncUiEnabled } from '@/services/sync/client'
+import { useAuthStore } from '@/stores/auth'
+import { useEditorStore } from '@/stores/editor'
+import { useLocaleStore } from '@/stores/locale'
+import { usePostStore } from '@/stores/post'
+import { useRenderStore } from '@/stores/render'
+import { useUIStore } from '@/stores/ui'
+
+const renderStore = useRenderStore()
+const editorStore = useEditorStore()
+const postStore = usePostStore()
+const uiStore = useUIStore()
+const authStore = useAuthStore()
+const localeStore = useLocaleStore()
+const { readingTime } = storeToRefs(renderStore)
+const { editor } = storeToRefs(editorStore)
+const { currentPost } = storeToRefs(postStore)
+const { isDark } = storeToRefs(uiStore)
+const { isMobile, viewMode, previewDevice, enableScrollSync } = storeToRefs(uiStore)
+const { isLoggedIn } = storeToRefs(authStore)
+const { locale } = storeToRefs(localeStore)
+const showAccountUi = isAccountUiEnabled()
+const showSyncUi = isSyncUiEnabled()
+const showShareUi = isShareUiEnabled()
+const { syncFooterIcon, syncFooterIconClass, syncTooltip } = useSyncFooterMeta()
+
+const isMoreOpen = ref(false)
+const { t, locale: i18nLocale } = useI18n()
+
+const currentLocaleOption = computed(() => getLocaleOption(locale.value))
+
+const nextLocaleOption = computed(() => getLocaleOption(getNextLocale(locale.value)))
+
+const languageTooltip = computed(() => {
+  void i18nLocale.value
+  return t(`footer.switchToLanguage`, { language: t(nextLocaleOption.value.labelKey) })
+})
+
+const accountTooltip = computed(() => {
+  if (!isLoggedIn.value)
+    return t(`footer.loginAccount`)
+  return t(`footer.accountWithLogin`, { login: authStore.user?.login ?? '' })
+})
+
+function openAccountDialog() {
+  isMoreOpen.value = false
+  uiStore.toggleShowAccountDialog(true)
+}
+
+function openSyncDialog() {
+  isMoreOpen.value = false
+  uiStore.toggleShowSyncDialog(true)
+}
+
+function openShareDialog() {
+  isMoreOpen.value = false
+  uiStore.openShareDialog()
+}
+
+function toggleTheme() {
+  isMoreOpen.value = false
+  uiStore.toggleDark()
+}
+
+function toggleLanguage() {
+  isMoreOpen.value = false
+  void localeStore.cycleLocale()
+}
+
+const cursorLine = ref(1)
+const cursorCol = ref(1)
+const selectionLength = ref(0)
+const totalLines = ref(1)
+
+const isGoToLineActive = ref(false)
+const goToLineInput = ref(``)
+const goToLineRef = ref<HTMLInputElement | null>(null)
+
+function openGoToLine() {
+  isGoToLineActive.value = true
+  goToLineInput.value = String(cursorLine.value)
+  nextTick(() => goToLineRef.value?.select())
+}
+
+function goToLine() {
+  const view = editor.value
+  if (!view)
+    return
+  const target = clampGoToLineValue(goToLineInput.value, totalLines.value)
+  jumpToLine(view as EditorView, target)
+  isGoToLineActive.value = false
+  updateCursorInfo(view as EditorView, { rebuildHeadings: true })
+}
+
+function cancelGoToLine() {
+  isGoToLineActive.value = false
+  editor.value?.focus()
+}
+
+const attachedViews = new WeakSet()
+
+const breadcrumbs = ref<MarkdownHeading[]>([])
+const allHeadings = ref<MarkdownHeading[]>([])
+
+function updateCursorInfo(view: EditorView, options: { rebuildHeadings?: boolean } = {}) {
+  const state = view.state
+  const main = state.selection.main
+  const line = state.doc.lineAt(main.head)
+  cursorLine.value = line.number
+  cursorCol.value = main.head - line.from + 1
+  totalLines.value = state.doc.lines
+  selectionLength.value = Math.abs(main.to - main.from)
+
+  if (options.rebuildHeadings) {
+    allHeadings.value = extractMarkdownHeadings(state.doc)
+  }
+  breadcrumbs.value = computeHeadingBreadcrumbs(allHeadings.value, line.number)
+}
+
+watch(editor, (view) => {
+  if (!view || attachedViews.has(view))
+    return
+
+  attachedViews.add(view)
+
+  updateCursorInfo(view as EditorView, { rebuildHeadings: true })
+
+  const extension = EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      updateCursorInfo(update.view, { rebuildHeadings: true })
+    }
+    else if (update.selectionSet) {
+      updateCursorInfo(update.view)
+    }
+  })
+
+  view.dispatch({
+    effects: StateEffect.appendConfig.of(extension),
+  })
+}, { immediate: true })
+
+watch(currentPost, () => {
+  nextTick(() => {
+    if (editor.value) {
+      updateCursorInfo(editor.value as EditorView, { rebuildHeadings: true })
+    }
+  })
+})
+
+const activeHeadingLine = computed(() => {
+  if (breadcrumbs.value.length === 0)
+    return -1
+  return breadcrumbs.value[breadcrumbs.value.length - 1].line
+})
+
+function jumpToHeading(line: number) {
+  const view = editor.value
+  if (!view)
+    return
+  jumpToLine(view as EditorView, line)
+  updateCursorInfo(view as EditorView)
+  nextTick(() => editor.value?.focus())
+}
+
+function onOutlineDismiss() {
+  nextTick(() => editor.value?.focus())
+}
+
+function switchToPost(id: string) {
+  postStore.currentPostId = id
+  nextTick(() => editor.value?.focus())
+}
+
+watch(() => uiStore.goToLineRequest, () => {
+  if (isGoToLineActive.value)
+    return
+  openGoToLine()
+})
+
+const savedTimeAgo = computed(() => {
+  void locale.value
+  if (!currentPost.value?.updateDatetime)
+    return ``
+  return formatRelativeTime(currentPost.value.updateDatetime)
+})
+
+// Refresh relative time every 10s (paused when page hidden)
+const refreshKey = ref(0)
+const REFRESH_INTERVAL_MS = 10_000
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+function startRefreshTimer() {
+  refreshTimer = setInterval(() => {
+    if (!document.hidden) {
+      refreshKey.value++
+    }
+  }, REFRESH_INTERVAL_MS)
+}
+
+startRefreshTimer()
+onUnmounted(() => {
+  if (refreshTimer)
+    clearInterval(refreshTimer)
+})
+
+// Force computed to depend on refreshKey and locale
+const displaySavedTime = computed(() => {
+  void refreshKey.value
+  void locale.value
+  return savedTimeAgo.value
+})
+
+const stats = computed(() => [
+  { icon: Pilcrow, value: readingTime.value.words, tooltip: t(`footer.wordCount`) },
+  { icon: Type, value: readingTime.value.chars, tooltip: t(`footer.charCount`) },
+  { icon: Clock, value: t(`footer.readingTimeMinutes`, { minutes: readingTime.value.minutes }), tooltip: t(`footer.estimatedReadingTime`) },
+  { icon: BookOpen, value: totalLines.value, tooltip: t(`footer.totalLines`) },
+])
+
+const allViewModes = computed(() => [
+  { key: `edit` as const, icon: PenLine, label: t(`footer.viewEdit`) },
+  { key: `split` as const, icon: Columns2, label: t(`footer.viewSplit`) },
+  { key: `preview` as const, icon: Eye, label: t(`footer.viewPreview`) },
+])
+const viewModes = computed(() =>
+  isMobile.value ? allViewModes.value.filter(m => m.key !== `split`) : allViewModes.value,
+)
+
+// Show device toggle in split/preview mode on non-mobile
+const showDeviceToggle = computed(() => viewMode.value !== `edit` && !isMobile.value)
+</script>
+
+<template>
+  <footer
+    class="flex select-none items-center overflow-hidden px-3 py-1 text-xs text-muted-foreground max-md:px-4 max-md:py-1.5 max-md:pb-[max(0.375rem,env(safe-area-inset-bottom,0px))]"
+  >
+    <TooltipProvider :delay-duration="300">
+      <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+        <span v-if="isGoToLineActive" class="flex items-center gap-1">
+          <Keyboard class="size-3 opacity-60" />
+          <input
+            ref="goToLineRef"
+            v-model="goToLineInput"
+            type="text"
+            inputmode="numeric"
+            class="h-4 w-16 rounded border border-primary/40 bg-transparent px-1 text-xs tabular-nums text-foreground outline-none focus:border-primary"
+            :placeholder="`1–${totalLines}`"
+            @keydown.enter="goToLine"
+            @keydown.escape="cancelGoToLine"
+            @blur="cancelGoToLine"
+          >
+        </span>
+        <Tooltip v-else>
+          <TooltipTrigger as-child>
+            <button type="button" class="flex cursor-pointer items-center gap-1 tabular-nums transition-colors hover:text-foreground" @click="openGoToLine">
+              <Keyboard class="size-3 opacity-60" />
+              <span class="hidden sm:inline">{{ t('footer.lineCol', { line: cursorLine, col: cursorCol }) }}</span>
+              <span class="sm:hidden">{{ cursorLine }}:{{ cursorCol }}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+            <p>{{ t('footer.cursorPosition', { total: totalLines }) }}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <span
+          v-if="selectionLength > 0"
+          class="hidden items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-primary tabular-nums sm:flex"
+        >
+          {{ t('footer.selectedChars', { count: selectionLength }) }}
+        </span>
+      </div>
+
+      <FooterDocumentSwitcher
+        :current-title="currentPost?.title"
+        @select="switchToPost"
+      />
+
+      <FooterOutlinePopover
+        :breadcrumbs="breadcrumbs"
+        :headings="allHeadings"
+        :active-heading-line="activeHeadingLine"
+        @jump="jumpToHeading"
+        @dismiss="onOutlineDismiss"
+      />
+
+      <div class="hidden min-w-0 flex-1 sm:block" />
+
+      <div class="ml-auto flex shrink-0 items-center gap-2.5 sm:gap-3.5">
+        <div class="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
+          <Tooltip v-for="mode in viewModes" :key="mode.key">
+            <TooltipTrigger as-child>
+              <button
+                :aria-label="mode.label"
+                class="flex cursor-pointer items-center rounded-sm px-1.5 py-0.5 transition-all duration-200"
+                :class="viewMode === mode.key
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+                @click="uiStore.setViewMode(mode.key)"
+              >
+                <component :is="mode.icon" class="size-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+              <p>{{ mode.label }}</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Tooltip v-if="!isMobile">
+          <TooltipTrigger as-child>
+            <button
+              :aria-label="previewDevice === 'desktop' ? t('footer.mobilePreview') : t('footer.desktopPreview')"
+              class="flex cursor-pointer items-center rounded-sm px-1.5 py-0.5 transition-all duration-200"
+              :class="showDeviceToggle
+                ? 'text-muted-foreground hover:bg-accent hover:text-foreground opacity-100'
+                : 'pointer-events-none opacity-0'"
+              @click="uiStore.togglePreviewDevice()"
+            >
+              <Monitor v-if="previewDevice === 'desktop'" class="size-3" />
+              <Smartphone v-else class="size-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+            <p>{{ previewDevice === 'desktop' ? t('footer.mobilePreview') : t('footer.desktopPreview') }}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip v-if="!isMobile && viewMode === 'split'">
+          <TooltipTrigger as-child>
+            <button
+              :aria-label="enableScrollSync ? t('footer.disableScrollSync') : t('footer.enableScrollSync')"
+              class="flex cursor-pointer items-center rounded-sm px-1.5 py-0.5 transition-all duration-200"
+              :class="enableScrollSync
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+              @click="uiStore.toggleScrollSync()"
+            >
+              <ArrowUpDown class="size-3" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+            <p>{{ enableScrollSync ? t('footer.disableScrollSync') : t('footer.enableScrollSync') }}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <span class="hidden text-border sm:block">·</span>
+
+        <Tooltip v-if="displaySavedTime">
+          <TooltipTrigger as-child>
+            <span class="hidden cursor-default items-center gap-1 opacity-70 transition-opacity hover:opacity-100 sm:flex">
+              <FileText class="size-3" />
+              {{ displaySavedTime }}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+            <p>{{ t('footer.lastModified') }}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <span class="hidden text-border sm:block">·</span>
+
+        <Tooltip v-for="stat in stats" :key="stat.tooltip">
+          <TooltipTrigger as-child>
+            <span class="hidden cursor-default items-center gap-1 tabular-nums sm:flex">
+              <component :is="stat.icon" class="size-3 opacity-60" />
+              {{ stat.value }}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+            <p>{{ stat.tooltip }}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <span class="hidden text-border sm:block">·</span>
+
+        <div class="flex items-center gap-0.5">
+          <template v-if="showAccountUi">
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  :aria-label="t('common.account')"
+                  class="hidden cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground sm:flex"
+                  :class="isLoggedIn ? 'text-primary' : ''"
+                  @click="openAccountDialog"
+                >
+                  <img
+                    v-if="isLoggedIn && authStore.user?.avatar"
+                    :src="authStore.user.avatar"
+                    :alt="authStore.user.login"
+                    class="size-3 rounded-full"
+                  >
+                  <User v-else-if="isLoggedIn" class="size-3" />
+                  <LogIn v-else class="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+                <p>{{ accountTooltip }}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <NotificationBell variant="footer" />
+          </template>
+
+          <div class="hidden items-center gap-0.5 sm:flex">
+            <template v-if="showSyncUi">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    :aria-label="t('menu.cloudSync')"
+                    class="flex cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                    @click="openSyncDialog"
+                  >
+                    <component
+                      :is="syncFooterIcon"
+                      class="size-3"
+                      :class="syncFooterIconClass"
+                    />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+                  <p>{{ isLoggedIn ? syncTooltip : t('menu.cloudSync') }}</p>
+                </TooltipContent>
+              </Tooltip>
+            </template>
+
+            <template v-if="showShareUi">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <button
+                    :aria-label="t('menu.sharePreview')"
+                    class="flex cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                    @click="openShareDialog"
+                  >
+                    <Share2 class="size-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+                  <p>{{ t('menu.sharePreview') }}</p>
+                </TooltipContent>
+              </Tooltip>
+            </template>
+
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  :aria-label="t('footer.toggleLanguage')"
+                  class="flex cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                  @click="toggleLanguage"
+                >
+                  <span class="min-w-3 text-center text-[10px] font-semibold leading-none tracking-wide">
+                    {{ currentLocaleOption.shortLabel }}
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+                <p>{{ languageTooltip }}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  :aria-label="t('footer.toggleDarkMode')"
+                  class="flex cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground"
+                  :class="isDark ? 'text-foreground' : ''"
+                  @click="toggleTheme"
+                >
+                  <Moon v-if="isDark" class="size-3" />
+                  <Sun v-else class="size-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" :side-offset="6" class="text-xs text-muted-foreground">
+                <p>{{ isDark ? t('common.lightMode') : t('common.darkMode') }}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
+          <Popover v-model:open="isMoreOpen">
+            <PopoverTriggerPrimitive as-child>
+              <button
+                :aria-label="t('common.moreActions')"
+                class="flex cursor-pointer items-center rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground sm:hidden"
+              >
+                <Ellipsis class="size-3" />
+              </button>
+            </PopoverTriggerPrimitive>
+            <PopoverContent side="top" :side-offset="8" align="end" class="w-48 p-1">
+              <button
+                v-if="showAccountUi"
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+                @click="openAccountDialog"
+              >
+                <img
+                  v-if="isLoggedIn && authStore.user?.avatar"
+                  :src="authStore.user.avatar"
+                  :alt="authStore.user.login"
+                  class="size-3 rounded-full"
+                >
+                <User v-else-if="isLoggedIn" class="size-3 shrink-0" />
+                <LogIn v-else class="size-3 shrink-0" />
+                <span class="min-w-0 flex-1 truncate">{{ accountTooltip }}</span>
+              </button>
+              <button
+                v-if="showSyncUi"
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+                @click="openSyncDialog"
+              >
+                <component
+                  :is="syncFooterIcon"
+                  class="size-3 shrink-0"
+                  :class="syncFooterIconClass"
+                />
+                <span>{{ isLoggedIn ? syncTooltip : t('menu.cloudSync') }}</span>
+              </button>
+              <button
+                v-if="showShareUi"
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+                @click="openShareDialog"
+              >
+                <Share2 class="size-3 shrink-0" />
+                <span>{{ t('menu.sharePreview') }}</span>
+              </button>
+              <button
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+                @click="toggleLanguage"
+              >
+                <span class="inline-flex size-3 shrink-0 items-center justify-center text-[10px] font-semibold leading-none">
+                  {{ currentLocaleOption.shortLabel }}
+                </span>
+                <span>{{ languageTooltip }}</span>
+              </button>
+              <button
+                class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-accent"
+                @click="toggleTheme"
+              >
+                <Moon v-if="isDark" class="size-3 shrink-0" />
+                <Sun v-else class="size-3 shrink-0" />
+                <span>{{ isDark ? t('common.lightMode') : t('common.darkMode') }}</span>
+              </button>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+    </TooltipProvider>
+  </footer>
+</template>

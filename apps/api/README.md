@@ -1,0 +1,193 @@
+# @md/api
+
+doocs/md 的后端 API，基于 **Cloudflare Workers + Hono + D1**，提供 GitHub 账户登录、文章/偏好的增量云同步与 Pro 计费。
+
+## 能力
+
+- GitHub OAuth 登录，签发自有 JWT（HS256，有效期 30 天）
+- 文章与偏好设置的增量同步（`/sync/pull`、`/sync/push`）
+- **预览分享**：登录用户可将编辑器预览快照发布为只读链接（`/share` → `GET /s/:id`），支持访问密码，默认 1 天过期
+- **主题 / 组件市场**：公开浏览已审核内容；登录后可发布（进入 `pending`）；`ADMIN_GITHUB_LOGINS` 管理员审核通过后上架
+- **云表情包**：公开默认表情包与资源代理；登录用户可管理一个最多 100 项的个人表情包
+- **免费 / Pro 套餐**：Pro 支持更高同步频率；免费版限 30 次/小时，Pro 限 300 次/小时
+- **爱发电 Pro 开通**：Webhook 自动激活 + 订单号手动激活
+- 冲突策略：**last-write-wins**（按 `updateDatetime`），软删除墓碑保证删除可传播
+- 数据范围：文章（含 history）+ 偏好白名单；**不包含图床密钥、AI 密钥**
+
+## 数据流
+
+```
+前端 ──Bearer JWT──> Worker ──> D1 (users / documents / settings / marketplace_items)
+爱发电 ──Webhook──> Worker ──> 更新 users.plan
+```
+
+- `GET  /auth/github` 跳转 GitHub 授权
+- `GET  /auth/github/callback` 回调，签发 JWT 后回跳前端（token 在 URL fragment）
+- `GET  /me` 当前用户（含 `plan`、`planExpiresAt`、`isAdmin`）
+- `GET  /sync/pull?since=<ms>` 拉取游标之后的变更
+- `POST /sync/push` 推送本地变更（LWW 合并）
+- `POST /sync/activate` 用爱发电订单号激活 Pro（需登录）
+- `GET  /share` 列出当前用户的分享（需登录 + Pro；不含 HTML 快照）
+- `POST /share` 创建/更新预览分享（需登录；按 `user_id + post_id` 去重）
+- `DELETE /share/:id` 取消分享（需登录 + Pro；链接立即失效）
+- `GET  /s/:shareId` 只读分享页（有密码时需先解锁）
+- `POST /s/:shareId/unlock` 校验分享密码并写入访问 Cookie
+- `GET  /marketplace/themes` 已上架主题列表（公开，支持 `q` / `sort` / 分页）
+- `GET  /marketplace/components` 已上架组件列表（公开）
+- `GET  /marketplace/:id` 详情（approved 公开；作者/管理员可见 pending/rejected）
+- `POST /marketplace/:id/install` 安装（递增 download_count，返回 payload）
+- `GET  /marketplace/me` 我的作品（需登录）
+- `POST /marketplace/themes` / `POST /marketplace/components` 发布（需登录 → `pending`）
+- `PATCH /marketplace/:id` 作者更新（回到 `pending`）
+- `DELETE /marketplace/:id` 作者删除
+- `GET  /marketplace/admin/pending` 待审列表（管理员）
+- `POST /marketplace/admin/:id/approve` / `reject` 审核（管理员）
+- `POST /webhooks/afdian` 爱发电订单 Webhook
+- `POST /upload` 默认图床上传（GitHub 或 R2，由服务端 `UPLOAD_BACKEND` 配置）
+- `GET  /emojis/default` 默认表情包清单（公开）
+- `GET  /emojis/assets/:id` 表情资源（公开；系统资源长期 immutable 缓存）
+- `GET  /emojis/me` 获取或创建个人表情包（需登录）
+- `PATCH /emojis/me` 修改个人表情包名称（需登录）
+- `POST /emojis/me/items` 上传单个表情（需登录；PNG/JPEG/GIF/WebP，最大 5 MiB）
+- `DELETE /emojis/me/items/:id` 删除个人表情（需登录）
+- `DELETE /emojis/me` 删除整个个人表情包（需登录）
+
+## 部署步骤
+
+### 1. 创建 D1 数据库
+
+```bash
+pnpm api exec wrangler d1 create md-sync
+```
+
+把输出的 `database_id` 填入 [`wrangler.toml`](./wrangler.toml) 的 `database_id`。
+
+### 2. 创建表情专用 R2 bucket
+
+表情资源必须与默认图床的 `UPLOAD_IMAGES` 分开存放：
+
+```bash
+pnpm api exec wrangler r2 bucket create md-emoji-assets
+pnpm api exec wrangler r2 bucket create md-emoji-assets-preview
+```
+
+自行部署时可修改 [`wrangler.toml`](./wrangler.toml) 中 `EMOJI_ASSETS` 的
+`bucket_name` 与 `preview_bucket_name`。
+
+### 3. 执行迁移
+
+```bash
+pnpm api db:migrate:local    # 本地开发库
+pnpm api db:migrate:remote   # 生产库
+```
+
+### 4. 配置 GitHub OAuth App
+
+在 GitHub → Settings → Developer settings → OAuth Apps 新建应用：
+
+- **Authorization callback URL**：`https://<your-worker-domain>/auth/github/callback`
+  （本地开发：`http://localhost:8787/auth/github/callback`）
+
+### 5. 设置密钥与变量
+
+```bash
+pnpm api exec wrangler secret put GITHUB_CLIENT_ID
+pnpm api exec wrangler secret put GITHUB_CLIENT_SECRET
+pnpm api exec wrangler secret put JWT_SECRET     # 任意高强度随机串
+pnpm api exec wrangler secret put AFDIAN_API_TOKEN
+pnpm api exec wrangler secret put AFDIAN_WEBHOOK_TOKEN  # 可选：Webhook 路径密钥
+```
+
+`APP_URL`、`AFDIAN_USER_ID` 在 [`wrangler.toml`](./wrangler.toml) 的 `[vars]` 中配置。
+
+本地开发可复制 [`.dev.vars.example`](./.dev.vars.example) 为 `.dev.vars` 并填入密钥。
+
+主题/组件市场审核管理员：本地在 `.dev.vars` 中设置 `ADMIN_GITHUB_LOGINS`（逗号分隔的 GitHub login，大小写不敏感）；生产用 `wrangler secret put ADMIN_GITHUB_LOGINS`（勿写入 `wrangler.toml`）。匹配的用户在 `GET /me` 中会得到 `isAdmin: true`，并可访问 `/marketplace/admin/*`。
+
+发布频控（UTC 日）：免费 5 次/天，Pro 30 次/天。主题 CSS ≤ 200KB，组件 JSON ≤ 50KB；主题禁止 `@import` 与外链 `url(https://…)`。
+
+#### 默认图床 API 上传
+
+在 `wrangler.toml` 设置 `UPLOAD_ENABLED = "true"`，并选择后端：
+
+**GitHub（官方默认）**
+
+```bash
+pnpm api exec wrangler secret put UPLOAD_GITHUB_TOKENS_BUCKETIO   # 逗号分隔 PAT
+```
+
+可选变量：`UPLOAD_GITHUB_USERNAME`、`UPLOAD_GITHUB_REPO_LIST`、`UPLOAD_GITHUB_BRANCH`、`UPLOAD_GITHUB_USE_CDN`。
+
+**R2（自行部署可选）**
+
+1. 创建 R2 bucket 并在 `wrangler.toml` 配置 `[[r2_buckets]]`
+2. 设置 `UPLOAD_BACKEND = "r2"` 与 `UPLOAD_R2_PUBLIC_URL`
+
+前端在 `apps/web/.env` 设置 `VITE_UPLOAD_VIA_API=true`（并与服务端 `UPLOAD_ENABLED` 同步）后，默认图床经 `POST /upload` 代理，GitHub PAT 不经过浏览器。
+
+限流（UTC 小时）：匿名 60 次、登录免费 120 次、Pro 300 次。
+
+### 6. 爱发电配置
+
+1. 在 [afdian.com 开发者后台](https://afdian.com/dashboard/dev) 配置 Webhook：
+   `https://<your-worker-domain>/webhooks/afdian`
+   若设置了 `AFDIAN_WEBHOOK_TOKEN`，地址改为 `https://<your-worker-domain>/webhooks/afdian/<token>`
+2. 创建 Pro 赞助方案（月/季/年），引导用户在付款备注填写 **GitHub 用户名**
+3. 可选：在 `wrangler.toml` 设置 `AFDIAN_PRO_PLAN_IDS` 限定可开通的方案 ID
+
+> **安全说明**：本服务代码公开托管，Webhook 回调内容**不可信任**。Worker 收到回调后
+> 只取订单号，再用爱发电 Open API 反查真实订单（以服务端返回为准）后才开通 Pro，
+> 因此伪造回调无法骗取 Pro。建议同时设置 `AFDIAN_WEBHOOK_TOKEN` 作为路径密钥，
+> 防止公开端点被刷量、空耗爱发电 API 配额。
+
+### 7. 本地运行 / 部署
+
+```bash
+pnpm api dev      # 本地 http://localhost:8787
+pnpm api deploy   # 部署到 Cloudflare
+```
+
+首次生产发布顺序：创建两个 R2 bucket → 应用 D1 迁移 → 运行经确认的远程种子 →
+部署 Worker。后续代码发布只需先应用新增迁移，再部署 Worker。
+
+> **Worker 改名迁移（md-sync → md-api）**：本服务的 Cloudflare worker 名已由 `md-sync` 更名为 `md-api`。
+> 若你此前部署过 `md-sync`，首次 `pnpm api deploy` 会创建全新的 `md-api` worker，需要在新 worker 上**重新设置所有 secret**
+> （见上方第 4 步），自定义域名 `md-api.doocs.org` 会指向新 worker；确认无误后可在 Cloudflare 控制台删除旧的 `md-sync` worker。
+> D1 数据库（资源名仍为 `md-sync`）按 `database_id` 绑定，数据不受影响。
+
+### 8. 前端接入
+
+在 `apps/web/.env`（参考 [`apps/web/.env.example`](../web/.env.example)）设置：
+
+```
+VITE_SYNC_API_URL=https://<your-worker-domain>
+VITE_AFDIAN_PAGE_URL=https://ifdian.net/a/doocs
+VITE_AFDIAN_ORDER_BASE=https://ifdian.net
+```
+
+官方 Pro 方案 plan_id（已写入 `wrangler.toml` 的 `AFDIAN_PRO_PLAN_IDS`）：
+
+| 档位 | plan_id                            |
+| ---- | ---------------------------------- |
+| 月付 | `81efdc48655711f18b6d52540025c377` |
+| 季付 | `ced9acca655a11f1a7cc52540025c377` |
+| 年付 | `df5084a2655a11f1bea45254001e7c00` |
+
+## 套餐说明
+
+| 能力                  | 免费       | Pro           |
+| --------------------- | ---------- | ------------- |
+| 手动同步              | ✅         | ✅            |
+| 自动同步              | —          | 编辑后约 3 秒 |
+| 同步频率上限          | 30 次/小时 | 300 次/小时   |
+| 分享（新建/更新）     | 2 次/天    | 不限          |
+| 我的分享（管理/取消） | —          | ✅            |
+
+爱发电每赞助 1 个月 = **31 天** Pro 有效期。
+
+## 说明与限制
+
+- 前端约定「先 pull 再 push」，`push` 仅返回本次被接受的记录与新游标。
+- 偏好设置同步后会自动应用到当前页面，文章为即时生效。
+- 同步白名单见 `apps/web/src/services/sync/settings.ts`，新增可同步项请在此维护，
+  切勿加入任何密钥类字段。

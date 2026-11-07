@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.js
 
@@ -10,24 +10,16 @@
 
 # production
 /build
+dist
 
 # misc
 .DS_Store
 .env.local
+.dev.vars
 .env.development.local
 .env.test.local
 .env.production.local
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-dist
-lib
-
-node_modules
-
-# Log files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -46,3 +38,31 @@ httpData
 public/upload/**
 !public/upload/*.gitkeep
 .history
+
+# Package manager lock file
+package-lock.json
+yarn.lock
+# pnpm-lock.yaml
+# NOTE: apps/web/auto-imports.d.ts and components.d.ts are committed on
+# purpose — the CI type-check job runs vue-tsc without a prior vite build,
+# so the generated globals must exist in a clean checkout.
+
+.wxt
+.output
+web-ext.config.ts
+.wrangler
+
+# Claude Code local settings
+.claude/settings.local.json
+# Tracked per-skill git symlinks live under .claude/skills/; ignore extras from `npx skills add`
+.claude/skills/*
+!.claude/skills/create-pr
+!.claude/skills/git-commit
+!.claude/skills/wechat-svg
+
+# vite-plugin-pwa dev output
+dev-dist
+
+# uTools build artifacts
+apps/utools/dist
+apps/utools/release

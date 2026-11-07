@@ -1,0 +1,274 @@
+/* Global variables */
+:root {
+}
+
+/* Root container */
+.container {
+}
+
+/* Headings */
+h1 {
+}
+
+h2 {
+}
+
+h3 {
+}
+
+h4 {
+}
+
+h5 {
+}
+
+h6 {
+}
+
+/* Paragraphs and text */
+p {
+}
+
+strong {
+}
+
+em {
+}
+
+/* Blockquote */
+blockquote {
+}
+
+blockquote > p {
+}
+
+/* Code */
+/* Inline code */
+.codespan {
+}
+
+/* Code block container */
+pre.code__pre,
+.hljs.code__pre {
+}
+
+/* Code inside code block */
+pre.code__pre > code,
+.hljs.code__pre > code {
+}
+
+/* Lists */
+ol {
+}
+
+ul {
+}
+
+li {
+}
+
+/* Tables */
+table {
+}
+
+thead {
+}
+
+th {
+}
+
+td {
+}
+
+/* Other elements */
+img {
+}
+
+hr {
+}
+
+/* Horizontal rule variant: --- */
+hr.hr-dash {
+}
+
+/* Horizontal rule variant: *** */
+hr.hr-star {
+}
+
+/* Horizontal rule variant: ___ */
+hr.hr-underscore {
+}
+
+figure {
+}
+
+figcaption {
+}
+
+/* KaTeX */
+.katex-inline {
+}
+
+.katex-block {
+}
+
+/* Markup */
+/* Highlight ==text== */
+.markup-highlight {
+}
+
+/* Underline ++text++ */
+.markup-underline {
+}
+
+/* Wavy underline ~text~ */
+.markup-wavyline {
+}
+
+/* GFM Alert */
+/* Alert titles */
+.alert-title-note {
+}
+
+.alert-title-tip {
+}
+
+.alert-title-info {
+}
+
+.alert-title-important {
+}
+
+.alert-title-warning {
+}
+
+.alert-title-caution {
+}
+
+.alert-title-abstract {
+}
+
+.alert-title-summary {
+}
+
+.alert-title-tldr {
+}
+
+.alert-title-todo {
+}
+
+.alert-title-success {
+}
+
+.alert-title-done {
+}
+
+.alert-title-question {
+}
+
+.alert-title-help {
+}
+
+.alert-title-faq {
+}
+
+.alert-title-failure {
+}
+
+.alert-title-fail {
+}
+
+.alert-title-missing {
+}
+
+.alert-title-danger {
+}
+
+.alert-title-error {
+}
+
+.alert-title-bug {
+}
+
+.alert-title-example {
+}
+
+.alert-title-quote {
+}
+
+.alert-title-cite {
+}
+
+/* Alert SVG icons */
+.alert-icon-note {
+}
+
+.alert-icon-tip {
+}
+
+.alert-icon-info {
+}
+
+.alert-icon-important {
+}
+
+.alert-icon-warning {
+}
+
+.alert-icon-caution {
+}
+
+/* Obsidian-style Callout SVG icons */
+.alert-icon-abstract {
+}
+
+.alert-icon-summary {
+}
+
+.alert-icon-tldr {
+}
+
+.alert-icon-todo {
+}
+
+.alert-icon-success {
+}
+
+.alert-icon-done {
+}
+
+.alert-icon-question {
+}
+
+.alert-icon-help {
+}
+
+.alert-icon-faq {
+}
+
+.alert-icon-failure {
+}
+
+.alert-icon-fail {
+}
+
+.alert-icon-missing {
+}
+
+.alert-icon-danger {
+}
+
+.alert-icon-error {
+}
+
+.alert-icon-bug {
+}
+
+.alert-icon-example {
+}
+
+.alert-icon-quote {
+}
+
+.alert-icon-cite {
+}

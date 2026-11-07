@@ -1,0 +1,26 @@
+{
+  "name": "@md/mcp-server",
+  "type": "module",
+  "version": "2.1.1",
+  "private": true,
+  "description": "MCP server for doocs/md – exposes markdown rendering and AI service information to AI agents",
+  "bin": {
+    "md-mcp": "src/index.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx/esm run.mjs",
+    "dev": "node --import tsx/esm --watch run.mjs",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@md/core": "workspace:*",
+    "@md/shared": "workspace:*",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "tsx": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

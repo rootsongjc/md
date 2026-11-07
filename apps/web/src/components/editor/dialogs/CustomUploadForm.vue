@@ -1,0 +1,96 @@
+<script setup lang='ts'>
+import { Compartment } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { theme } from '@md/shared'
+import { javascriptSetup } from '@md/shared/editor/javascript'
+import { removeLeft } from '@md/shared/utils/basicHelpers'
+import { store } from '@/storage'
+import { useUIStore } from '@/stores/ui'
+
+const { t } = useI18n()
+
+const code = store.reactive(`formCustomConfig`, removeLeft(`
+  const { file, util, okCb, errCb } = CUSTOM_ARG
+  param = new FormData()
+  param.append('file', file)
+  util.axios.post('${window.location.origin}/upload', param, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }).then(res => {
+    okCb(res.url)
+  }).catch(err => {
+    errCb(err)
+  })
+`).trim())
+
+const formCustomTextarea = useTemplateRef<HTMLDivElement>(`formCustomTextarea`)
+
+const uiStore = useUIStore()
+const { isDark } = storeToRefs(uiStore)
+
+const editor = ref<EditorView | null>(null)
+
+const themeCompartment = new Compartment()
+
+onMounted(() => {
+  const editorView = new EditorView({
+    parent: formCustomTextarea.value!,
+    extensions: [javascriptSetup(), themeCompartment.of(theme(isDark.value))],
+    doc: code.value,
+  })
+
+  editor.value = editorView
+})
+
+watch(isDark, (dark) => {
+  editor.value?.dispatch({
+    effects: themeCompartment.reconfigure(theme(dark)),
+  })
+})
+
+onUnmounted(() => {
+  if (editor.value) {
+    editor.value.destroy()
+  }
+})
+
+function formCustomSave() {
+  const str = editor.value!.state.doc.toString()
+  code.value = str
+  toast.success(t('common.saveSuccess'))
+}
+</script>
+
+<template>
+  <div class="flex flex-col flex-1 overflow-hidden">
+    <div class="flex-1 overflow-y-auto p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden space-y-4">
+      <div class="h-60 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col overflow-y-auto">
+        <div
+          ref="formCustomTextarea"
+          class="flex-1 custom-codemirror"
+        />
+      </div>
+      <Button
+        variant="link"
+        class="p-0 h-auto text-left whitespace-normal"
+        as="a"
+        href="https://github.com/doocs/md/blob/main/docs/custom-upload.md"
+        target="_blank" rel="noopener noreferrer"
+      >
+        {{ t('customUpload.paramDetails') }}
+      </Button>
+    </div>
+    <DialogFooter class="p-1">
+      <Button @click="formCustomSave">
+        {{ t('customUpload.saveConfig') }}
+      </Button>
+    </DialogFooter>
+  </div>
+</template>
+
+<style scoped>
+@media (max-width: 768px) {
+  :deep(.CodeMirror) {
+    font-size: 12px;
+  }
+}
+</style>

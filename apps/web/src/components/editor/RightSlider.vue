@@ -1,0 +1,547 @@
+<script setup lang="ts">
+import type {
+  HeadingLevel,
+  HeadingStyleType,
+  ThemeName,
+} from '@md/shared/configs'
+import type { Format } from 'vue-pick-colors'
+import { X } from '@lucide/vue'
+import PickColors from 'vue-pick-colors'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { useEditorRefresh } from '@/composables/useEditorRefresh'
+import { useLocalizedStyleOptions } from '@/composables/useLocalizedStyleOptions'
+import { useConfirmStore } from '@/stores/confirm'
+import { useCssEditorStore } from '@/stores/cssEditor'
+import { useThemeStore } from '@/stores/theme'
+import { useUIStore } from '@/stores/ui'
+
+const confirmStore = useConfirmStore()
+const cssEditorStore = useCssEditorStore()
+const uiStore = useUIStore()
+const themeStore = useThemeStore()
+const { t } = useI18n()
+const localizedStyleOptions = useLocalizedStyleOptions()
+const {
+  theme,
+  fontFamily,
+  fontSize,
+  lineHeight,
+  blockSpacing,
+  linkColor,
+  blockquoteBackground,
+  primaryColor,
+  codeBlockTheme,
+  legend,
+  isMacCodeBlock,
+  isShowLineNumber,
+  isCiteStatus,
+  isUseIndent,
+  isUseJustify,
+  isCountStatus,
+} = storeToRefs(themeStore)
+
+const { scheduleEditorRefresh, editorRefresh } = useEditorRefresh()
+
+const selectedHeadingLevel = ref<HeadingLevel>(`h2`)
+const selectedHeadingStyle = computed({
+  get: () => themeStore.getHeadingStyle(selectedHeadingLevel.value),
+  set: (val: HeadingStyleType) => {
+    themeStore.setHeadingStyle(selectedHeadingLevel.value, val)
+    if (val === `custom`) {
+      uiStore.isShowCssEditor = true
+      nextTick(() => {
+        setTimeout(() => {
+          cssEditorStore.scrollToHeading(selectedHeadingLevel.value)
+        }, 100)
+      })
+    }
+    // Apply theme immediately for preset or custom to restore heading styles
+    themeStore.applyCurrentTheme()
+    scheduleEditorRefresh()
+  },
+})
+
+// reka-ui SelectValue caches textContent; re-render localized labels on locale change
+const selectedHeadingStyleLabel = computed(() =>
+  localizedStyleOptions.value.headingStyleOptions
+    .find(option => option.value === selectedHeadingStyle.value)
+    ?.label,
+)
+
+const { isMobile, isOpenRightSlider, isDark } = storeToRefs(uiStore)
+
+function themeChanged(newTheme: ThemeName) {
+  themeStore.theme = newTheme
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function openThemeMarketplace() {
+  uiStore.openMarketplaceDialog({ tab: `theme`, view: `discover` })
+}
+
+function fontChanged(fonts: string) {
+  themeStore.fontFamily = fonts
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function sizeChanged(size: string) {
+  themeStore.fontSize = size
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function lineHeightChanged(value: string) {
+  themeStore.lineHeight = value
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function blockSpacingChanged(value: string) {
+  themeStore.blockSpacing = value
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function linkColorChanged(value: string) {
+  themeStore.linkColor = value
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function blockquoteBackgroundChanged(value: string) {
+  themeStore.blockquoteBackground = value
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function colorChanged(newColor: string) {
+  themeStore.primaryColor = newColor
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function codeBlockThemeChanged(newTheme: unknown) {
+  if (typeof newTheme !== 'string')
+    return
+  themeStore.codeBlockTheme = newTheme
+  scheduleEditorRefresh()
+}
+
+function legendChanged(newVal: string) {
+  themeStore.legend = newVal
+  scheduleEditorRefresh()
+}
+
+function macCodeBlockChanged() {
+  themeStore.isMacCodeBlock = !themeStore.isMacCodeBlock
+  scheduleEditorRefresh()
+}
+
+function showLineNumberChanged() {
+  themeStore.isShowLineNumber = !themeStore.isShowLineNumber
+  scheduleEditorRefresh()
+}
+
+function citeStatusChanged() {
+  themeStore.isCiteStatus = !themeStore.isCiteStatus
+  scheduleEditorRefresh()
+}
+
+function useIndentChanged() {
+  themeStore.isUseIndent = !themeStore.isUseIndent
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function useJustifyChanged() {
+  themeStore.isUseJustify = !themeStore.isUseJustify
+
+  themeStore.applyCurrentTheme()
+  scheduleEditorRefresh()
+}
+
+function setMacCodeBlock(checked: boolean) {
+  if (checked !== isMacCodeBlock.value)
+    macCodeBlockChanged()
+}
+
+function setShowLineNumber(checked: boolean) {
+  if (checked !== isShowLineNumber.value)
+    showLineNumberChanged()
+}
+
+function setCiteStatus(checked: boolean) {
+  if (checked !== isCiteStatus.value)
+    citeStatusChanged()
+}
+
+function setUseIndent(checked: boolean) {
+  if (checked !== isUseIndent.value)
+    useIndentChanged()
+}
+
+function setUseJustify(checked: boolean) {
+  if (checked !== isUseJustify.value)
+    useJustifyChanged()
+}
+
+function countStatusChanged() {
+  themeStore.isCountStatus = !themeStore.isCountStatus
+  editorRefresh()
+}
+
+function setCountStatus(checked: boolean) {
+  if (checked !== isCountStatus.value)
+    countStatusChanged()
+}
+
+function resetStyleConfirm() {
+  confirmStore.confirm({
+    title: t(`confirm.tip`),
+    description: t(`confirm.resetStyleDescription`),
+    onConfirm: () => {
+      themeStore.resetStyle()
+      cssEditorStore.resetCssConfig()
+      themeStore.applyCurrentTheme()
+      editorRefresh()
+      toast.success(t(`toast.styleReset`))
+    },
+  })
+}
+
+const enableAnimation = ref(false)
+
+watch(isOpenRightSlider, () => {
+  if (isMobile.value) {
+    enableAnimation.value = true
+  }
+})
+
+watch(isMobile, () => {
+  enableAnimation.value = false
+})
+
+const pickColorsContainer = useTemplateRef<HTMLElement | undefined>(`pickColorsContainer`)
+const format = ref<Format>(`rgb`)
+const formatOptions = ref<Format[]>([`rgb`, `hex`, `hsl`, `hsv`])
+
+// Grid width below which option buttons switch to compact blocks
+const COMPACT_GRID_WIDTH = 280
+
+// Show color swatch only when right sidebar is narrow
+const colorGridRef = useTemplateRef<HTMLElement | undefined>(`colorGridRef`)
+const { width: colorGridWidth } = useElementSize(colorGridRef)
+const isColorCompact = computed(() => colorGridWidth.value > 0 && colorGridWidth.value < COMPACT_GRID_WIDTH)
+
+// Shrink theme buttons to compact blocks when right sidebar is narrow
+const themeGridRef = useTemplateRef<HTMLElement | undefined>(`themeGridRef`)
+const { width: themeGridWidth } = useElementSize(themeGridRef)
+const isThemeCompact = computed(() => themeGridWidth.value > 0 && themeGridWidth.value < COMPACT_GRID_WIDTH)
+</script>
+
+<template>
+  <div
+    v-if="isMobile && isOpenRightSlider"
+    class="fixed inset-0 bg-black/50 z-40"
+    @click="isOpenRightSlider = false"
+  />
+
+  <div
+    class="h-full overflow-hidden"
+    :class="{
+      'fixed top-0 right-0 w-full h-full z-55 bg-background border-l shadow-lg mobile-right-drawer': isMobile,
+      'animate': isMobile && enableAnimation,
+    }"
+    :style="isMobile ? { transform: isOpenRightSlider ? 'translateX(0)' : 'translateX(100%)' } : undefined"
+  >
+    <div
+      class="h-full space-y-4 overflow-auto p-4"
+      :class="{ 'pt-0': isMobile }"
+    >
+      <div v-if="isMobile" class="sticky top-0 z-10 -mx-4 mb-4 border-b bg-background px-4 pb-3 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
+        <div aria-hidden="true" class="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/25" />
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">
+            {{ t('rightSlider.title') }}
+          </h2>
+          <Button variant="ghost" size="sm" :aria-label="t('common.close')" :title="t('common.close')" @click="isOpenRightSlider = false">
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.theme') }}
+        </h2>
+        <div
+          ref="themeGridRef"
+          class="grid gap-2"
+          :class="isThemeCompact ? 'grid-cols-4 sm:grid-cols-5' : 'grid-cols-3'"
+        >
+          <Button
+            v-for="{ label, value } in localizedStyleOptions.themeOptions"
+            :key="value"
+            class="h-auto w-full text-xs whitespace-nowrap"
+            :class="[
+              isThemeCompact ? 'justify-center px-1 py-2' : 'px-1.5 py-2',
+              {
+                'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': theme === value,
+              },
+            ]"
+            variant="outline"
+            :title="label"
+            :aria-label="label"
+            @click="themeChanged(value)"
+          >
+            <span :class="{ 'min-w-0 truncate': isThemeCompact }">{{ label }}</span>
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-8 w-full justify-start px-1.5 text-xs text-muted-foreground"
+          @click="openThemeMarketplace"
+        >
+          {{ t('marketplace.exploreThemes') }}
+        </Button>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.font') }}
+        </h2>
+        <div class="grid grid-cols-3 gap-2">
+          <Button
+            v-for="{ label, value } in localizedStyleOptions.fontFamilyOptions" :key="value" variant="outline" class="h-auto w-full px-1.5 py-2 text-xs whitespace-nowrap"
+            :class="{ 'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': fontFamily === value }" @click="fontChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.fontSize') }}
+        </h2>
+        <div class="grid grid-cols-5 gap-1.5">
+          <Button
+            v-for="{ label, value, desc } in localizedStyleOptions.fontSizeOptions" :key="value" variant="outline" class="h-auto w-full px-1 py-2 text-xs whitespace-nowrap" :title="desc" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': fontSize === value,
+            }" @click="sizeChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.lineHeight') }}
+        </h2>
+        <div class="grid grid-cols-5 gap-1.5">
+          <Button
+            v-for="{ label, value, desc } in localizedStyleOptions.lineHeightOptions" :key="value" variant="outline" class="h-auto w-full px-1 py-2 text-xs whitespace-nowrap" :title="desc" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': lineHeight === value,
+            }" @click="lineHeightChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.blockSpacing') }}
+        </h2>
+        <div class="grid grid-cols-5 gap-1.5">
+          <Button
+            v-for="{ label, value, desc } in localizedStyleOptions.blockSpacingOptions" :key="value" variant="outline" class="h-auto w-full px-1 py-2 text-xs whitespace-nowrap" :title="desc" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': blockSpacing === value,
+            }" @click="blockSpacingChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.linkColor') }}
+        </h2>
+        <div class="grid grid-cols-3 gap-1.5">
+          <Button
+            v-for="{ label, value, desc } in localizedStyleOptions.linkColorOptions" :key="value" variant="outline" class="h-auto w-full px-1 py-2 text-xs whitespace-nowrap" :title="desc" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': linkColor === value,
+            }" @click="linkColorChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.blockquoteBackground') }}
+        </h2>
+        <div class="grid grid-cols-3 gap-1.5">
+          <Button
+            v-for="{ label, value, desc } in localizedStyleOptions.blockquoteBackgroundOptions" :key="value" variant="outline" class="h-auto w-full px-1 py-2 text-xs whitespace-nowrap" :title="desc" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': blockquoteBackground === value,
+            }" @click="blockquoteBackgroundChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.primaryColor') }}
+        </h2>
+        <div
+          ref="colorGridRef"
+          class="grid gap-2"
+          :class="isColorCompact ? 'grid-cols-4 sm:grid-cols-5' : 'grid-cols-3'"
+        >
+          <Button
+            v-for="{ label, value } in localizedStyleOptions.colorOptions"
+            :key="value"
+            class="h-auto w-full text-xs whitespace-nowrap"
+            :class="[
+              isColorCompact ? 'justify-center px-1 py-2' : 'px-1.5 py-2',
+              {
+                'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': primaryColor === value,
+              },
+            ]"
+            variant="outline"
+            :title="label"
+            :aria-label="label"
+            @click="colorChanged(value)"
+          >
+            <span
+              class="inline-block shrink-0 rounded-full"
+              :class="isColorCompact ? 'size-4' : 'mr-1.5 size-3'"
+              :style="{ background: value }"
+            />
+            <span v-if="!isColorCompact">{{ label }}</span>
+          </Button>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.customPrimaryColor') }}
+        </h2>
+        <div ref="pickColorsContainer">
+          <PickColors
+            v-if="pickColorsContainer" v-model:value="primaryColor" show-alpha :format="format"
+            :format-options="formatOptions" :theme="isDark ? 'dark' : 'light'"
+            :popup-container="pickColorsContainer" @change="colorChanged"
+          />
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('rightSlider.headingStyle') }}
+        </h2>
+        <div class="flex gap-2">
+          <Select v-model="selectedHeadingLevel">
+            <SelectTrigger class="w-[120px]">
+              <SelectValue :placeholder="t('rightSlider.selectHeading')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="{ label, value } in localizedStyleOptions.headingLevelOptions" :key="value" :value="value">
+                {{ label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="selectedHeadingStyle">
+            <SelectTrigger class="flex-1">
+              <SelectValue :placeholder="t('rightSlider.selectStyle')">
+                {{ selectedHeadingStyleLabel }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="{ label, value } in localizedStyleOptions.headingStyleOptions" :key="value" :value="value">
+                {{ label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.codeBlockTheme') }}
+        </h2>
+        <Select v-model="codeBlockTheme" @update:model-value="codeBlockThemeChanged">
+          <SelectTrigger>
+            <SelectValue :placeholder="t('rightSlider.selectCodeBlockTheme')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="{ label, value } in localizedStyleOptions.codeBlockThemeOptions" :key="label" :value="value">
+              {{ label }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('menu.legendFormat') }}
+        </h2>
+        <div class="grid grid-cols-2 gap-2">
+          <Button
+            v-for="{ label, value } in localizedStyleOptions.legendOptions" :key="value" class="h-auto w-full px-1.5 py-2 text-xs whitespace-nowrap" variant="outline" :class="{
+              'bg-accent text-accent-foreground ring-1 ring-primary/20 border-primary': legend === value,
+            }" @click="legendChanged(value)"
+          >
+            {{ label }}
+          </Button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="mac-code-block" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('menu.macCodeBlock') }}</Label>
+        <Switch id="mac-code-block" class="shrink-0" :model-value="isMacCodeBlock" @update:model-value="setMacCodeBlock" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="show-line-number" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('rightSlider.codeBlockLineNumber') }}</Label>
+        <Switch id="show-line-number" class="shrink-0" :model-value="isShowLineNumber" @update:model-value="setShowLineNumber" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="cite-status" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('rightSlider.citeStatus') }}</Label>
+        <Switch id="cite-status" class="shrink-0" :model-value="isCiteStatus" @update:model-value="setCiteStatus" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="use-indent" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('rightSlider.paragraphIndent') }}</Label>
+        <Switch id="use-indent" class="shrink-0" :model-value="isUseIndent" @update:model-value="setUseIndent" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="use-justify" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('rightSlider.paragraphJustify') }}</Label>
+        <Switch id="use-justify" class="shrink-0" :model-value="isUseJustify" @update:model-value="setUseJustify" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <Label for="count-status" class="min-w-0 shrink text-xs leading-snug sm:text-sm">{{ t('rightSlider.wordCount') }}</Label>
+        <Switch id="count-status" class="shrink-0" :model-value="isCountStatus" @update:model-value="setCountStatus" />
+      </div>
+      <div class="space-y-2">
+        <h2 class="text-sm font-medium">
+          {{ t('rightSlider.styleConfig') }}
+        </h2>
+        <Button variant="destructive" @click="resetStyleConfirm">
+          {{ t('menu.reset') }}
+        </Button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.mobile-right-drawer.animate {
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+</style>

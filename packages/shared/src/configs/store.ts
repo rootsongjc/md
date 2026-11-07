@@ -1,0 +1,35 @@
+/**
+ * Store state keys for import/export UI.
+ * Web labels live in apps/web i18n: editorState.storeLabels (zh-CN / en-US editor.ts).
+ */
+export const storeLabels: Record<string, string> = {
+  isDark: `isDark`,
+  isMacCodeBlock: `isMacCodeBlock`,
+  isShowLineNumber: `isShowLineNumber`,
+  isCiteStatus: `isCiteStatus`,
+  isCountStatus: `isCountStatus`,
+  isUseIndent: `isUseIndent`,
+  isUseJustify: `isUseJustify`,
+  isOpenRightSlider: `isOpenRightSlider`,
+  isOpenPostSlider: `isOpenPostSlider`,
+  showAIToolbox: `showAIToolbox`,
+  theme: `theme`,
+  fontFamily: `fontFamily`,
+  fontSize: `fontSize`,
+  primaryColor: `primaryColor`,
+  codeBlockTheme: `codeBlockTheme`,
+  legend: `legend`,
+  fontSizeNumber: `fontSizeNumber`,
+  currentPostId: `currentPostId`,
+  currentPostIndex: `currentPostIndex`,
+  posts: `posts`,
+  cssContentConfig: `cssContentConfig`,
+  titleList: `titleList`,
+  readingTime: `readingTime`,
+  isShowCssEditor: `isShowCssEditor`,
+  isShowTableEditDialog: `isShowTableEditDialog`,
+  isShowInsertMpCardDialog: `isShowInsertMpCardDialog`,
+  isShowUploadImgDialog: `isShowUploadImgDialog`,
+  aiDialogVisible: `aiDialogVisible`,
+  aiImageDialogVisible: `aiImageDialogVisible`,
+}

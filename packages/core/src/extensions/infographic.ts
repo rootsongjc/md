@@ -1,0 +1,276 @@
+import type { DiagramMessages } from '@md/shared/types'
+import type { MarkedExtension, Token } from 'marked'
+import type { InfographicToken } from '../types/marked-tokens'
+import type { DiagramThemeMode } from './diagram-theme'
+import { asDiagramToken, asTextTokenRenderer, isCodeToken } from '../types/marked-tokens'
+import {
+  diagramStateAttr,
+  formatDiagramMessage,
+  MD_DIAGRAM_STATE,
+  MD_DIAGRAM_STATE_ATTR,
+  resolveDiagramMessages,
+} from '../utils/asyncDiagramState'
+import { simpleHash } from '../utils/basicHelpers'
+import { blockScanLimit, findAtLineStart } from '../utils/scan'
+import { createSVGCache } from '../utils/svgCache'
+import { DIAGRAM_DARK_COLORS, DIAGRAM_LIGHT_COLORS, resolveDiagramThemeMode } from './diagram-theme'
+
+interface InfographicOptions {
+  themeMode?: DiagramThemeMode
+  diagramMessages?: DiagramMessages
+}
+
+type InfographicOptionsSource = InfographicOptions | (() => InfographicOptions | undefined)
+
+const svgCache = createSVGCache(50)
+const pendingMeta = new Map<string, { code: string, options?: InfographicOptions }>()
+const inFlight = new Set<string>()
+
+const INFOGRAPHIC_FENCE = '```infographic'
+const RE_INFOGRAPHIC_BLOCK = /^```infographic\r?\n([\s\S]*?)\r?\n```/
+const INFOGRAPHIC_ID_PREFIX = `infographic-`
+const OFFSCREEN_ROOT_ID = `md-infographic-offscreen-root`
+const OFFSCREEN_WIDTH = `800px`
+
+const INFOGRAPHIC_LIGHT_COLORS = {
+  theme: `default` as const,
+  colorBg: DIAGRAM_LIGHT_COLORS.background,
+  colorText: DIAGRAM_LIGHT_COLORS.text,
+  svgBackground: `transparent`,
+}
+
+const INFOGRAPHIC_DARK_COLORS = {
+  theme: `dark` as const,
+  colorBg: DIAGRAM_DARK_COLORS.background,
+  colorText: DIAGRAM_DARK_COLORS.text,
+  svgBackground: DIAGRAM_DARK_COLORS.background,
+}
+
+function buildInfographicCacheKey(code: string, themeMode?: DiagramThemeMode): string {
+  return simpleHash(`${code}-${resolveDiagramThemeMode(themeMode)}-v2`)
+}
+
+function resolveInfographicTheme(options?: InfographicOptions) {
+  const palette = options?.themeMode === `dark` ? INFOGRAPHIC_DARK_COLORS : INFOGRAPHIC_LIGHT_COLORS
+
+  let colorPrimary: string | undefined
+  if (typeof window !== `undefined`) {
+    colorPrimary = getComputedStyle(document.documentElement)
+      .getPropertyValue(`--md-primary-color`)
+      .trim() || undefined
+  }
+
+  return {
+    theme: palette.theme,
+    svgBackground: palette.svgBackground,
+    themeConfig: {
+      colorPrimary,
+      colorBg: palette.colorBg,
+      colorText: palette.colorText,
+    },
+  }
+}
+
+function resolveOptions(options?: InfographicOptionsSource): InfographicOptions | undefined {
+  return typeof options === `function` ? options() : options
+}
+
+function getOffscreenRoot(): HTMLDivElement {
+  let root = document.getElementById(OFFSCREEN_ROOT_ID) as HTMLDivElement | null
+  if (!root) {
+    root = document.createElement(`div`)
+    root.id = OFFSCREEN_ROOT_ID
+    root.style.cssText = `position:fixed;left:-9999px;top:0;width:${OFFSCREEN_WIDTH};visibility:hidden;pointer-events:none;overflow:hidden;`
+    document.body.appendChild(root)
+  }
+  return root
+}
+
+function svgElementToHtml(svg: SVGElement | Node): string {
+  const wrapper = document.createElement(`div`)
+  wrapper.replaceChildren(svg)
+  return wrapper.innerHTML
+}
+
+function applySvgByCacheKey(cacheKey: string, svgHtml: string) {
+  const el = document.getElementById(`${INFOGRAPHIC_ID_PREFIX}${cacheKey}`)
+  if (el) {
+    el.innerHTML = svgHtml
+    el.setAttribute(MD_DIAGRAM_STATE_ATTR, MD_DIAGRAM_STATE.ready)
+  }
+}
+
+function showInfographicError(containerId: string, error: unknown, messages?: DiagramMessages) {
+  const container = document.getElementById(containerId)
+  if (!container)
+    return
+
+  const detail = error instanceof Error ? error.message : String(error)
+  const resolved = resolveDiagramMessages(messages)
+  container.innerHTML = `<div style="color: red; padding: 10px; border: 1px solid red;">${formatDiagramMessage(resolved.infographicError, detail)}</div>`
+  container.setAttribute(MD_DIAGRAM_STATE_ATTR, MD_DIAGRAM_STATE.error)
+}
+
+async function renderInfographicSvgHtml(code: string, options?: InfographicOptions): Promise<string> {
+  const cacheKey = buildInfographicCacheKey(code, options?.themeMode)
+  const cached = svgCache.get(cacheKey)
+  if (cached)
+    return cached
+
+  const offscreenContainer = document.createElement(`div`)
+  offscreenContainer.style.width = OFFSCREEN_WIDTH
+  getOffscreenRoot().appendChild(offscreenContainer)
+
+  try {
+    const { Infographic, setDefaultFont, setFontExtendFactor, exportToSVG } = await import('@antv/infographic')
+
+    setFontExtendFactor(1.1)
+    setDefaultFont('-apple-system-font, "system-ui", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif')
+
+    const { theme, svgBackground, themeConfig } = resolveInfographicTheme(options)
+
+    const svgHtml = await new Promise<string>((resolve, reject) => {
+      const instance = new Infographic({
+        container: offscreenContainer,
+        svg: {
+          style: {
+            width: `100%`,
+            height: `100%`,
+            background: svgBackground,
+          },
+          background: false,
+        },
+        theme,
+        themeConfig,
+      })
+
+      instance.on(`loaded`, ({ node }) => {
+        exportToSVG(node, { removeIds: true })
+          .then((svg) => {
+            const html = svgElementToHtml(svg)
+            svgCache.set(cacheKey, html)
+            resolve(html)
+          })
+          .catch(reject)
+      })
+
+      try {
+        instance.render(code)
+      }
+      catch (error) {
+        reject(error)
+      }
+    })
+
+    return svgHtml
+  }
+  finally {
+    offscreenContainer.remove()
+  }
+}
+
+async function renderInfographic(containerId: string, code: string, cacheKey: string, options?: InfographicOptions) {
+  if (typeof window === `undefined`)
+    return
+
+  pendingMeta.set(cacheKey, { code, options })
+
+  const cached = svgCache.get(cacheKey)
+  if (cached) {
+    applySvgByCacheKey(cacheKey, cached)
+    return
+  }
+
+  if (inFlight.has(cacheKey))
+    return
+
+  inFlight.add(cacheKey)
+
+  try {
+    const svgHtml = await renderInfographicSvgHtml(code, options)
+    applySvgByCacheKey(cacheKey, svgHtml)
+  }
+  catch (error) {
+    console.error(`Failed to render Infographic:`, error)
+    showInfographicError(containerId, error, options?.diagramMessages)
+  }
+  finally {
+    inFlight.delete(cacheKey)
+  }
+}
+
+/** After preview DOM updates, write cached SVG into placeholders or retry pending renders. */
+export function hydratePendingInfographicDiagrams(root: ParentNode, options?: InfographicOptions) {
+  if (typeof window === `undefined`)
+    return
+
+  root.querySelectorAll<HTMLElement>(`.infographic-diagram`).forEach((el) => {
+    if (el.querySelector(`svg, img`))
+      return
+
+    if (el.getAttribute(MD_DIAGRAM_STATE_ATTR) === MD_DIAGRAM_STATE.error)
+      return
+
+    const id = el.id
+    if (!id?.startsWith(INFOGRAPHIC_ID_PREFIX))
+      return
+
+    const cacheKey = id.slice(INFOGRAPHIC_ID_PREFIX.length)
+    const cached = svgCache.get(cacheKey)
+    if (cached) {
+      el.innerHTML = cached
+      return
+    }
+
+    const meta = pendingMeta.get(cacheKey)
+    if (meta)
+      void renderInfographic(id, meta.code, cacheKey, options ?? meta.options)
+  })
+}
+
+export function markedInfographic(options?: InfographicOptionsSource): MarkedExtension {
+  const className = `infographic-diagram`
+
+  return {
+    extensions: [
+      {
+        name: `infographic`,
+        level: `block`,
+        start(src: string) {
+          return findAtLineStart(src, INFOGRAPHIC_FENCE, blockScanLimit(src))
+        },
+        tokenizer(src: string) {
+          const match = RE_INFOGRAPHIC_BLOCK.exec(src)
+          if (match) {
+            return {
+              type: `infographic`,
+              raw: match[0],
+              text: match[1].trim(),
+            }
+          }
+        },
+        renderer: asTextTokenRenderer((token: InfographicToken) => {
+          const code = token.text
+          const currentOptions = resolveOptions(options)
+          const cacheKey = buildInfographicCacheKey(code, currentOptions?.themeMode)
+
+          const cached = svgCache.get(cacheKey)
+          if (cached) {
+            return `<!--infographic-start--><div class="${className}" style="width: 100%;">${cached}</div><!--infographic-end-->`
+          }
+
+          const id = `${INFOGRAPHIC_ID_PREFIX}${cacheKey}`
+          void renderInfographic(id, code, cacheKey, currentOptions)
+
+          const messages = resolveDiagramMessages(currentOptions?.diagramMessages)
+          return `<!--infographic-start--><div id="${id}" class="${className}" style="width: 100%;" ${diagramStateAttr(MD_DIAGRAM_STATE.loading)}>${messages.infographicLoading}</div><!--infographic-end-->`
+        }),
+      },
+    ],
+    walkTokens(token: Token) {
+      if (isCodeToken(token) && token.lang === `infographic`) {
+        asDiagramToken<InfographicToken>(token, `infographic`)
+      }
+    },
+  }
+}

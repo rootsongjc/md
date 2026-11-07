@@ -1,0 +1,52 @@
+name: Build Surge Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    if: github.repository == 'doocs/md'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/setup@v3
+        with:
+          version: 12.14.0
+          runtime: node@22
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm web build:h5-netlify
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: apps/web/dist
+          retention-days: 5
+
+      - name: Save PR number
+        if: ${{ always() }}
+        run: echo ${{ github.event.number }} > ./pr-id.txt
+
+      - name: Upload PR number
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr
+          path: ./pr-id.txt

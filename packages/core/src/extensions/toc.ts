@@ -1,0 +1,73 @@
+import type { MarkedExtension } from 'marked'
+import { blockScanLimit, findLineEquals } from '../utils/scan'
+
+/** marked extension: [TOC] syntax for nested table of contents */
+export function markedToc(): MarkedExtension {
+  let headings: { text: string, depth: number, index: number }[] = []
+
+  return {
+    hooks: {
+      preprocess(markdown) {
+        headings = []
+        return markdown
+      },
+    },
+    walkTokens(token) {
+      if (token.type === `heading`) {
+        const text = token.text || ``
+        const depth = token.depth || 1
+        const index = headings.length
+        headings.push({ text, depth, index })
+      }
+    },
+    extensions: [
+      {
+        name: `toc`,
+        level: `block`,
+        start(src) {
+          // Match [TOC] on its own line only
+          return findLineEquals(src, `[TOC]`, blockScanLimit(src))
+        },
+        tokenizer(src) {
+          const match = /^\[TOC\]/.exec(src)
+          if (match) {
+            return {
+              type: `toc`,
+              raw: match[0],
+            }
+          }
+        },
+        renderer() {
+          const tocHeadings = headings.filter(h => h.depth !== 1)
+          if (!tocHeadings.length)
+            return ``
+          const minDepth = Math.min(...tocHeadings.map(h => h.depth))
+          let html = `<nav class="markdown-toc"><ul class="toc-ul toc-level-${minDepth} pl-4 border-l ml-2">`
+          let lastDepth = minDepth
+          tocHeadings.forEach(({ text, depth, index }) => {
+            if (depth > lastDepth) {
+              for (let i = lastDepth + 1; i <= depth; i++) {
+                html += `<ul class="toc-ul toc-level-${i} pl-4 border-l ml-2">`
+              }
+            }
+            else if (depth < lastDepth) {
+              for (let i = lastDepth; i > depth; i--) {
+                html += `</ul>`
+              }
+            }
+            html += `<li class="toc-li toc-level-${depth} mb-1"><a class="text-gray-700 hover:text-blue-600 underline transition-colors" href="#${index}">${text}</a></li>`
+            lastDepth = depth
+          })
+
+          for (let i = lastDepth; i > 1; i--) {
+            html += `</ul>`
+          }
+
+          html += `</ul></nav>`
+
+          return html
+        },
+      },
+    ],
+  }
+}
